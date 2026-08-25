@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<deployment name="GVI_example">
+    <component id="GVI_example"/>
+    <timed>
+        <deploy coverage="0.7" maxAge="95" minAge="0" time="2005-01-01"/>
+    </timed>
+</deployment>

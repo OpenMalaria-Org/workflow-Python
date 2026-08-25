@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Example GVI intervention that models deterrency and postprandial killing effects, such as an insecticide-treated net. -->
+<component id="GVI_example">
+    <GVI>
+        <!-- Exponential decay with a half-life of 3 years, see: https://github.com/OpenMalaria-Org/openmalaria/wiki/ModelDecayFunctions -->
+        <decay function="exponential" L="3y"/>
+        <anophelesParams mosquito="gambiae_ss">
+            <deterrency value="0.7696"/>
+            <postprandialKillingEffect value="0.0544"/>
+        </anophelesParams>
+        <anophelesParams mosquito="funestus">
+            <deterrency value="0.7696"/>
+            <postprandialKillingEffect value="0.0544"/>
+        </anophelesParams>
+        <anophelesParams mosquito="arabiensis">
+            <deterrency value="0.7696"/>
+            <postprandialKillingEffect value="0.0544"/>
+        </anophelesParams>
+    </GVI>
+</component>
