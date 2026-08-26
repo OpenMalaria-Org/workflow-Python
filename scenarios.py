@@ -3,6 +3,7 @@ from itertools import product
 from pathlib import Path
 import shutil
 
+import re
 import pandas as pd
 from lxml import etree
 
@@ -146,11 +147,19 @@ def write_scenarios(mapping, scenarios, experiment_folder, om,
 
     xml_folder.mkdir(parents=True)
 
+    # Update the OpenMalaria namespace before parsing the XML.
+    scaffold_xml = Path(mapping["scaffold"]).read_bytes()
+    scaffold_xml = re.sub(
+        rb"http://openmalaria\.org/schema/scenario_\d+",
+        f'http://openmalaria.org/schema/scenario_{om["version"]}'.encode(),
+        scaffold_xml,
+    )
+
     for row in scenarios.index:
         index = scenarios.at[row, "index"]
 
-        doc = etree.parse(str(mapping["scaffold"]))
-        root = doc.getroot()
+        root = etree.fromstring(scaffold_xml)
+        doc = etree.ElementTree(root)
 
         root.set("schemaVersion", str(om["version"]))
         root.set(

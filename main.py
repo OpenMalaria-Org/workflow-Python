@@ -27,8 +27,8 @@ slurm = {
 if shutil.which("sbatch") is None: slurm = None  # # slurm = None if not available, e.g. running on a laptop
 
 om = {
-    "version": 49,
-    "path": str(Path("../fork/openMalaria-49.0").resolve()),
+    "version": 50,
+    "path": str(Path("../fork/openMalaria-50.0").resolve()),
     "output_format": "bin.gz",  # "bin", "bin.gz", "txt", or "txt.gz"
 }
 
