@@ -5,9 +5,6 @@ import os
 import shlex
 import shutil
 import subprocess
-import time
-
-from extract import to_df
 
 
 def prepare(experiment_folder, om):
@@ -24,16 +21,19 @@ def _quote(arg):
     return subprocess.list2cmdline([arg]) if os.name == "nt" else shlex.quote(arg)
 
 
+def _format_index(index):
+    if isinstance(index, float) and index.is_integer():
+        index = int(index)
+    return str(index)
+
+
 def create_commands(scenarios, experiment_folder, om):
     commands = []
     output_format = om["output_format"].removesuffix(".gz")
     compress_output = om["output_format"].endswith(".gz")
 
     for _, scenario in scenarios.iterrows():
-        index = scenario["index"]
-        if isinstance(index, float) and index.is_integer():
-            index = int(index)
-
+        index = _format_index(scenario["index"])
         outputfile = scenario["outputFile"]
         exe = Path(om["path"]) / ("openMalaria.exe" if os.name == "nt" else "openMalaria")
 
@@ -62,7 +62,7 @@ def run(scenarios, experiment_folder, om, slurm=None, overwrite=False, local_cor
         raise ValueError(f'Unknown output_format: {om["output_format"]}')
 
     xml_files = [
-        Path(experiment_folder) / "xml" / f"{index}.xml"
+        Path(experiment_folder) / "xml" / f'{_format_index(index)}.xml'
         for index in scenarios["index"]
     ]
     if not all(path.exists() for path in xml_files):
@@ -87,8 +87,9 @@ def run(scenarios, experiment_folder, om, slurm=None, overwrite=False, local_cor
     for folder in folders:
         folder.mkdir(parents=True)
 
+    scenarios = scenarios.copy()
     scenarios["outputFile"] = [
-        str(Path("out") / f'{index}.{om["output_format"]}')
+        str(Path("out") / f'{_format_index(index)}.{om["output_format"]}')
         for index in scenarios["index"]
     ]
     scenarios.to_csv(Path(experiment_folder) / "scenarios.csv", index=False)
@@ -101,34 +102,6 @@ def run(scenarios, experiment_folder, om, slurm=None, overwrite=False, local_cor
         run_local(commands, experiment_folder, om, local_cores)
     else:
         run_slurm(commands, experiment_folder, om, slurm)
-
-
-def extract(scenarios, experiment_folder, overwrite=False):
-    print("Extracting results...")
-    output_file = Path(experiment_folder) / "output.csv"
-
-    if output_file.exists() and not overwrite:
-        raise FileExistsError(
-            f"Output file already exists: {output_file}. Use overwrite=True to replace it."
-        )
-
-    if "outputFile" not in scenarios.columns:
-        import pandas as pd
-        scenarios = pd.read_csv(Path(experiment_folder) / "scenarios.csv")
-
-    start_time = time.time()
-    df = to_df(scenarios, experiment_folder)
-    print(f"Extract time: {time.time() - start_time:.3f} seconds")
-
-    if df.empty:
-        print("Error: extraction failed, output dataframe is empty")
-        print("       output.csv not saved")
-    else:
-        start_time = time.time()
-        df.to_csv(output_file, index=False)
-        print(f"Write time: {time.time() - start_time:.3f} seconds")
-
-    return df
 
 
 def run_slurm(commands, experiment_folder, om, slurm):

@@ -1,6 +1,7 @@
 from pathlib import Path
 import gzip
 import struct
+import time
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,7 @@ def _read_exact(con, n, path):
 
 def read_monitoring_binary(path):
     path = Path(path)
-    open_file = gzip.open if path.suffix == ".gz" else open
+    open_file = gzip.open if path.name.endswith(".gz") else open
 
     with open_file(path, "rb") as con:
         header = _read_exact(con, 28, path)
@@ -107,3 +108,30 @@ def to_df(scenarios, experiment_folder):
         print("       Check the log files and make sure OpenMalaria is able to run")
 
     return result
+
+
+def extract(scenarios, experiment_folder, overwrite=False):
+    print("Extracting results...")
+    output_file = Path(experiment_folder) / "output.pkl"
+
+    if output_file.exists() and not overwrite:
+        raise FileExistsError(
+            f"Output file already exists: {output_file}. Use overwrite=True to replace it."
+        )
+
+    if "outputFile" not in scenarios.columns:
+        scenarios = pd.read_csv(Path(experiment_folder) / "scenarios.csv")
+
+    start_time = time.time()
+    df = to_df(scenarios, experiment_folder)
+    print(f"Extract time: {time.time() - start_time:.3f} seconds")
+
+    if df.empty:
+        print("Error: extraction failed, output dataframe is empty")
+        print(f"       {output_file} not saved")
+    else:
+        start_time = time.time()
+        df.to_pickle(output_file)
+        print(f"Write time: {time.time() - start_time:.3f} seconds")
+
+    return df

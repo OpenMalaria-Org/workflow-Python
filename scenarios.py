@@ -1,9 +1,10 @@
 from copy import deepcopy
 from itertools import product
 from pathlib import Path
+import re
 import shutil
 
-import re
+import numpy as np
 import pandas as pd
 from lxml import etree
 
@@ -21,84 +22,99 @@ def xml_new_root(name):
 
 
 def read_xml(path):
-    return etree.parse(str(path)).getroot()
+    parser = etree.XMLParser(remove_blank_text=True)
+    return etree.parse(str(path), parser).getroot()
 
 
-def s(scaffold, *replacements):
-    """Create an XML-to-scenario mapping.
+class ScenarioVariable:
+    """A scenario-column placeholder created with variable()."""
 
-    Each replacement is an (XPath, value) tuple.
+    def __init__(self, name):
+        self.name = name
 
-    Fixed value:
-        ("demography/@popSize", 1000)
+    def __str__(self):
+        return self.name
 
-    Scenario variable:
-        ("entomology/@scaledAnnualEIR", {"eir": [5, 20]})
+
+def variable(name):
+    if not isinstance(name, str) or not name:
+        raise ValueError("variable() must contain a column name")
+    return ScenarioVariable(name)
+
+
+def is_variable(x):
+    return isinstance(x, ScenarioVariable)
+
+
+def create_template(scaffold, *replacements):
+    """Create an XML template used to generate each scenario XML.
+
+    Each replacement is an (XPath, value) tuple:
+
+    Fixed scalar:
+        ("demography/@popSize", 200)
+    XML node (snippets offer more flexibility):
+        ("interventions/human", read_xml("snippets/GVI.component.xml"))
+    Placeholder variable:
+        ("entomology/@scaledAnnualEIR", variable("eir"))
+
+    The same variable can be referenced by multiple XPaths, and multiple
+    nodes can be inserted at the same XPath.
     """
     if any(
         not isinstance(r, tuple) or len(r) != 2 or not isinstance(r[0], str) or not r[0]
         for r in replacements
     ):
         raise ValueError(
-            'Each replacement must be an (XPath, value) tuple, e.g. '
+            'Name each replacement with its XPath, e.g. '
             '("demography/@popSize", 200)'
         )
 
-    def valid(value):
-        if is_xml(value):
-            return True
-        if isinstance(value, dict):
-            return (
-                len(value) == 1
-                and bool(next(iter(value)))
-                and len(next(iter(value.values()))) > 0
-            )
-        return not isinstance(value, (list, tuple, set))
+    def valid(x):
+        return (
+            is_xml(x)
+            or is_variable(x)
+            or not isinstance(x, (list, tuple, set, dict))
+        )
 
     if not all(valid(value) for _, value in replacements):
         raise ValueError(
-            "Use scalar or XML fixed values, or {'name': values} for varying values"
+            "Use scalar or XML fixed values, or variable(name) for scenario variables"
         )
 
     return {"scaffold": scaffold, "replacements": list(replacements)}
 
 
-def mapping_variables(mapping):
-    # Match R's duplicated(..., fromLast = TRUE): if several XPaths map to the
-    # same scenario column, the last declaration supplies its initial values.
-    variables = []
-    seen = set()
-
-    for _, value in reversed(mapping["replacements"]):
-        if isinstance(value, dict):
-            name, values = next(iter(value.items()))
-            if name not in seen:
-                variables.append((name, list(values)))
-                seen.add(name)
-
-    variables.reverse()
-    return variables
+def template_variables(template):
+    # unique(): keep variables in order of first appearance
+    return list(dict.fromkeys(
+        str(value)
+        for _, value in template["replacements"]
+        if is_variable(value)
+    ))
 
 
-def create_scenarios(mapping):
-    variables = mapping_variables(mapping)
+def cj(**columns):
+    """Cross-join (full-factorial) expansion, like data.table::CJ().
 
-    if not variables:
-        return pd.DataFrame({"index": [1]})
+    Each column is sorted, deduplicated and expanded into every combination
+    of values; scalars are recycled. The last column varies fastest,
+    matching R's CJ() ordering.
+    """
+    names = list(columns)
+    values = []
 
-    names = [name for name, _ in variables]
-    values = [values for _, values in variables]
+    for name in names:
+        value = columns[name]
+        if np.isscalar(value) or isinstance(value, (str, bytes)):
+            value = [value]
+        values.append(sorted(set(value)))
 
-    # itertools.product varies the last iterable fastest, while R expand.grid()
-    # varies the first variable fastest. Reverse twice to preserve R ordering.
-    rows = [
-        tuple(reversed(combo))
-        for combo in product(*reversed(values))
-    ]
+    # itertools.product varies the last iterable fastest, which matches
+    # data.table::CJ() ordering.
+    rows = list(product(*values))
 
-    scenarios = pd.DataFrame(rows, columns=names)
-    scenarios.insert(0, "index", range(1, len(scenarios) + 1))
-    return scenarios
+    return pd.DataFrame(rows, columns=names)
 
 
 def _namespaces(root):
@@ -117,18 +133,23 @@ def _find_targets(root, path):
     return "element", nodes, None
 
 
-def write_scenarios(mapping, scenarios, experiment_folder, om,
+def write_scenarios(template, scenarios, experiment_folder, om,
                     validate_xml=True, overwrite=False):
+
     if "index" not in scenarios.columns:
-        raise ValueError("scenarios must contain an index column")
+        raise ValueError("The scenarios table must contain an index column")
 
     if scenarios["index"].isna().any() or scenarios["index"].duplicated().any():
-        raise ValueError("scenario indices must be unique and non-missing")
+        raise ValueError("The scenario indices must be unique and non-missing")
 
-    variables = mapping_variables(mapping)
-    missing = [name for name, _ in variables if name not in scenarios.columns]
+    variables = template_variables(template)
+    missing = [name for name in variables if name not in scenarios.columns]
+
     if missing:
-        raise ValueError("Missing scenario columns: " + ", ".join(missing))
+        raise ValueError(
+            "The following variables were mapped but are missing from the "
+            "scenarios table: " + ", ".join(missing)
+        )
 
     schema = None
     if validate_xml:
@@ -147,18 +168,21 @@ def write_scenarios(mapping, scenarios, experiment_folder, om,
 
     xml_folder.mkdir(parents=True)
 
-    # Update the OpenMalaria namespace before parsing the XML.
-    scaffold_xml = Path(mapping["scaffold"]).read_bytes()
-    scaffold_xml = re.sub(
+    xml = Path(template["scaffold"]).read_bytes()
+
+    xml = re.sub(
         rb"http://openmalaria\.org/schema/scenario_\d+",
         f'http://openmalaria.org/schema/scenario_{om["version"]}'.encode(),
-        scaffold_xml,
+        xml,
     )
 
-    for row in scenarios.index:
-        index = scenarios.at[row, "index"]
+    # remove_blank_text + pretty_print reformat the document like xml2 does
+    parser = etree.XMLParser(remove_blank_text=True)
 
-        root = etree.fromstring(scaffold_xml)
+    for row in range(len(scenarios)):
+        index = scenarios["index"].iat[row]
+
+        root = etree.fromstring(xml, parser)
         doc = etree.ElementTree(root)
 
         root.set("schemaVersion", str(om["version"]))
@@ -168,15 +192,14 @@ def write_scenarios(mapping, scenarios, experiment_folder, om,
             f'scenario_{om["version"]}.xsd',
         )
 
-        for path, mapped_value in mapping["replacements"]:
-            value = mapped_value
-
-            # {'eir': [...]} means: use scenarios['eir'] for this row.
-            if isinstance(value, dict):
-                variable = next(iter(value))
-                value = scenarios.at[row, variable]
+        for path, value in template["replacements"]:
+            # variable("name") means:
+            # use the value from scenarios["name"] for this row
+            if is_variable(value):
+                value = scenarios[value.name].iat[row]
 
             target_type, nodes, attribute = _find_targets(root, path)
+
             if not nodes:
                 raise ValueError(f"XPath did not match: {path}")
 
@@ -199,10 +222,9 @@ def write_scenarios(mapping, scenarios, experiment_folder, om,
             errors = "\n".join(str(error) for error in schema.error_log)
             raise ValueError(f"Invalid scenario {index}:\n{errors}")
 
-        doc.write(
-            str(xml_folder / f"{index}.xml"),
-            encoding="UTF-8",
-            xml_declaration=True,
-        )
+        # write the XML declaration exactly like xml2/libxml2 does
+        with open(xml_folder / f"{index}.xml", "wb") as f:
+            f.write(b'<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n')
+            doc.write(f, encoding="UTF-8", xml_declaration=False, pretty_print=True)
 
     print(f"{len(scenarios)} scenarios created")
