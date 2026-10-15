@@ -61,6 +61,13 @@ def run(scenarios, experiment_folder, om, slurm=None, overwrite=False, local_cor
     if om["output_format"] not in {"bin", "bin.gz", "txt", "txt.gz"}:
         raise ValueError(f'Unknown output_format: {om["output_format"]}')
 
+    if om["version"] < 50 and om["output_format"] in {"bin", "bin.gz"}:
+        raise ValueError(
+            "Binary output requires OpenMalaria version >= 50 "
+            f"(output_format='{om['output_format']}' but version={om['version']}). "
+            "Use output_format='txt' or 'txt.gz'."
+        )
+
     xml_files = [
         Path(experiment_folder) / "xml" / f'{_format_index(index)}.xml'
         for index in scenarios["index"]
