@@ -31,6 +31,7 @@ def create_commands(scenarios, experiment_folder, om):
     commands = []
     output_format = om["output_format"].removesuffix(".gz")
     compress_output = om["output_format"].endswith(".gz")
+    has_output_format = om["version"] >= 50  # the --output-format option was added in version 50
 
     for _, scenario in scenarios.iterrows():
         index = _format_index(scenario["index"])
@@ -40,8 +41,12 @@ def create_commands(scenarios, experiment_folder, om):
         args = [
             exe,
             "-s", Path("xml") / f"{index}.xml",
-            "--output-format", output_format,
         ]
+        if has_output_format:
+            args += ["--output-format", output_format]
+        elif compress_output:
+            # older builds append ".gz" to the --output file themselves
+            outputfile = outputfile.removesuffix(".gz")
         if compress_output:
             args.append("--compress-output")
         args += ["--output", outputfile]
