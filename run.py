@@ -104,7 +104,7 @@ def run(scenarios, experiment_folder, om, slurm=None, overwrite=False, local_cor
         str(Path("out") / f'{_format_index(index)}.{om["output_format"]}')
         for index in scenarios["index"]
     ]
-    scenarios.to_csv(Path(experiment_folder) / "scenarios.csv", index=False)
+    scenarios.to_parquet(Path(experiment_folder) / "scenarios.parquet", index=False)
 
     print("Creating commands...")
     commands = create_commands(scenarios, experiment_folder, om)

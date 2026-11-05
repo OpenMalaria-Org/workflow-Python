@@ -1,5 +1,6 @@
 from pathlib import Path
 import gzip
+import shutil
 import struct
 import time
 
@@ -107,12 +108,21 @@ def to_df(scenarios, experiment_folder):
         print("Error: Dataframe is empty because no outputs were found")
         print("       Check the log files and make sure OpenMalaria is able to run")
 
-    return result
+    return result, info_count == 0 and not result.empty
 
 
-def extract(scenarios, experiment_folder, overwrite=False):
+def cleanup(experiment_folder):
+    folder = Path(experiment_folder)
+    for name in ["xml", "out", "log"]:
+        shutil.rmtree(folder / name, ignore_errors=True)
+    for pattern in ["commands.txt", "start_array_job.sh", "densities.csv", "scenario_*.xsd"]:
+        for f in folder.glob(pattern):
+            f.unlink()
+
+
+def extract(scenarios, experiment_folder, overwrite=False, remove_temp_files=True):
     print("Extracting results...")
-    output_file = Path(experiment_folder) / "output.pkl"
+    output_file = Path(experiment_folder) / "output.parquet"
 
     if output_file.exists() and not overwrite:
         raise FileExistsError(
@@ -120,10 +130,10 @@ def extract(scenarios, experiment_folder, overwrite=False):
         )
 
     if "outputFile" not in scenarios.columns:
-        scenarios = pd.read_csv(Path(experiment_folder) / "scenarios.csv")
+        scenarios = pd.read_parquet(Path(experiment_folder) / "scenarios.parquet")
 
     start_time = time.time()
-    df = to_df(scenarios, experiment_folder)
+    df, complete = to_df(scenarios, experiment_folder)
     print(f"Extract time: {time.time() - start_time:.3f} seconds")
 
     if df.empty:
@@ -131,7 +141,12 @@ def extract(scenarios, experiment_folder, overwrite=False):
         print(f"       {output_file} not saved")
     else:
         start_time = time.time()
-        df.to_pickle(output_file)
+        df.to_parquet(output_file)
         print(f"Write time: {time.time() - start_time:.3f} seconds")
+
+        # Temporary files are removed only if every scenario output was extracted
+        if remove_temp_files and complete:
+            print("Removing temporary files...")
+            cleanup(experiment_folder)
 
     return df

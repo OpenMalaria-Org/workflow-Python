@@ -2,3 +2,5 @@ pandas
 numpy
 lxml
 matplotlib
+pyarrow
+
