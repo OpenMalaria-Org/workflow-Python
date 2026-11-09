@@ -40,7 +40,7 @@ template <- create_template(
     "model/computationParameters/@iseed" = variable(seed)
 )
 
-scenarios <- CJ(eir = c(5, 20), seed = 1:3)   # full-factorial grid
+scenarios <- CJ(eir = c(5, 20), seed = 1:3)   # full-factorial grid: 6 scenarios (2 EIRs x 3 seeds)
 scenarios[, index := .I]
 
 write_scenarios(template, scenarios, "experiment", om)
