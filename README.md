@@ -48,7 +48,15 @@ run(scenarios, "experiment", om)
 df <- extract(scenarios, "experiment")
 ```
 
-The Python workflow is identical, replacing `CJ` with `cj` and using `pandas` instead of `data.table`. See `main.R` / `main.ipynb` for a fully commented example, and `example.plot.R` / `example.plot.ipynb` for turning the results into plots.
+Load the results:
+
+```r
+df <- nanoparquet::read_parquet("experiment/output.parquet")  # R
+```
+
+```python
+df = pd.read_parquet("experiment/output.parquet")             # Python
+```
 
 ## Requirements
 
