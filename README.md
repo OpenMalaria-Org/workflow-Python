@@ -75,7 +75,7 @@ template = create_template(
 )
 ```
 
-The first element of each pair is an XPath expression that locates the attribute to modify. Each `variable("name")` refers to a column in the scenarios table created below. These placeholders are replaced in each generated XML scenario by the value from the scenarios table, so a parameter can vary from one simulation to the next — for parameter sweeps, replicates across seeds, or sensitivity analysis.
+The first element of each pair is an XPath expression that locates the attribute to modify. Each `variable("name")` refers to a column in the scenarios table created below.
 
 ### 3. Choose the simulations to run
 
