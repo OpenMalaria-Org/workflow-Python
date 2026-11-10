@@ -52,15 +52,15 @@ from run import run
 from extract import extract
 
 om = {
-    "version": 50,
+    "version": 49,
     "path": "/absolute/path/to/openmalaria-release",
-    "output_format": "bin.gz",
+    "output_format": "txt",
 }
 
 experiment_folder = "experiment"
 ```
 
-The directory in `om["path"]` should contain the `openMalaria` executable, the matching `scenario_50.xsd` schema, and `densities.csv`. Binary output (`bin` or `bin.gz`) requires OpenMalaria 50 or later; for older releases use `txt` or `txt.gz`.
+The directory in `om["path"]` should contain the `openMalaria` executable, the matching `scenario_49.xsd` schema, and `densities.csv`.
 
 ### 2. Define the XML template
 
@@ -75,7 +75,7 @@ template = create_template(
 )
 ```
 
-The first element of each pair is an XPath expression that locates the attribute to modify. Each `variable("name")` refers to a column in the scenarios table created below. A variable may be reused in multiple XPath expressions, so one parameter can control several XML fields.
+The first element of each pair is an XPath expression that locates the attribute to modify. Each `variable("name")` refers to a column in the scenarios table created below. These placeholders are replaced in each generated XML scenario by the value from the scenarios table, so a parameter can vary from one simulation to the next — for parameter sweeps, replicates across seeds, or sensitivity analysis.
 
 ### 3. Choose the simulations to run
 
